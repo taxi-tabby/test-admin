@@ -2,7 +2,7 @@ import { Admin, Resource, List, Datagrid, TextField, Edit, SimpleForm, TextInput
 import { Layout } from "./Layout";
 import { dataProvider } from "./dataProvider";
 import { authProvider } from "./authProvider";
-import { People } from "@mui/icons-material";
+import { People, Article, Category } from "@mui/icons-material";
 
 const UserList = () => (
   <List>
@@ -26,6 +26,51 @@ const UserEdit = () => (
   </Edit>
 );
 
+const PostList = () => (
+  <List>
+    <Datagrid>
+      <TextField source="id" />
+      <TextField source="title" />
+      <TextField source="author" />
+      <TextField source="published_at" />
+      <EditButton />
+    </Datagrid>
+  </List>
+);
+
+const PostEdit = () => (
+  <Edit>
+    <SimpleForm>
+      <TextInput source="id" disabled label="게시물 ID" />
+      <TextInput source="title" label="제목" validate={required()} />
+      <TextInput source="author" label="작성자" validate={required()} />
+      <TextInput source="content" multiline label="내용" />
+      <TextInput source="published_at" label="발행일" />
+    </SimpleForm>
+  </Edit>
+);
+
+const CategoryList = () => (
+  <List>
+    <Datagrid>
+      <TextField source="id" />
+      <TextField source="name" />
+      <TextField source="description" />
+      <EditButton />
+    </Datagrid>
+  </List>
+);
+
+const CategoryEdit = () => (
+  <Edit>
+    <SimpleForm>
+      <TextInput source="id" disabled label="카테고리 ID" />
+      <TextInput source="name" label="카테고리명" validate={required()} />
+      <TextInput source="description" label="설명" multiline />
+    </SimpleForm>
+  </Edit>
+);
+
 
 
 
@@ -43,6 +88,22 @@ export const App = () => (
         edit={UserEdit}
         icon={People}
         options={{ label: '사용자 관리' }}
+      />
+      
+      <Resource 
+        name="posts" 
+        list={PostList}
+        edit={PostEdit}
+        icon={Article}
+        options={{ label: '게시물 관리' }}
+      />
+      
+      <Resource 
+        name="categories" 
+        list={CategoryList}
+        edit={CategoryEdit}
+        icon={Category}
+        options={{ label: '카테고리 관리' }}
       />
 
     </Admin>
