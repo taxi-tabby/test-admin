@@ -23,7 +23,7 @@ interface JsonApiResource {
 }
 
 interface JsonApiResponse {
-  data: JsonApiResource | JsonApiResource[];
+  data?: JsonApiResource | JsonApiResource[];
   included?: JsonApiResource[];
   meta?: {
     total?: number;
@@ -38,6 +38,7 @@ interface JsonApiResponse {
     next?: string;
     last?: string;
   };
+  errors?: JsonApiError[];
   jsonapi?: { version: string };
 }
 
@@ -69,15 +70,30 @@ const buildQueryString = (params: Record<string, string>): string =>
 
 const ensureArray = <T>(data: T | T[]): T[] => Array.isArray(data) ? data : [data];
 
-const createHttpClient = () => {
-  const defaultHeaders = {
-    'Content-Type': 'application/vnd.api+json',
-    'Accept': 'application/vnd.api+json',
-  };
+const validateJsonApiResource = (resource: JsonApiResource): void => {
+  if (typeof resource.type !== 'string') {
+    throw new Error('Resource type must be a string');
+  }
+  if (typeof resource.id !== 'string') {
+    throw new Error('Resource id must be a string');
+  }
+};
 
+const createHttpClient = () => {
   return async (url: string, options: RequestInit = {}): Promise<JsonApiResponse> => {
+    const isWriteOperation = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(options.method || 'GET');
+    
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.api+json',
+    };
+    
+    // Content-Type은 body가 있는 요청에서만 설정
+    if (isWriteOperation && options.body) {
+      headers['Content-Type'] = 'application/vnd.api+json';
+    }
+
     const response = await fetch(url, {
-      headers: { ...defaultHeaders, ...options.headers },
+      headers: { ...headers, ...options.headers },
       ...options,
     });
 
@@ -85,33 +101,56 @@ const createHttpClient = () => {
 
     if (!response.ok) {
       const errorResponse = responseData as JsonApiErrorResponse;
-      const error = errorResponse.errors?.[0];
-      throw new Error(error?.detail || error?.title || `HTTP ${response.status}: ${response.statusText}`);
+      
+      // JSON API 스펙에 맞는 에러 구조 생성
+      if (errorResponse.errors && Array.isArray(errorResponse.errors)) {
+        const error = errorResponse.errors[0];
+        throw new Error(error?.detail || error?.title || `HTTP ${response.status}: ${response.statusText}`);
+      } else {
+        // 일반 HTTP 에러를 JSON API 에러 형식으로 변환
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
     }
 
     return responseData;
   };
 };
 
-// 리소스 변환 함수들
-const transformFromJsonApi = (resource: JsonApiResource): any => ({
-  id: resource.id,
-  ...resource.attributes,
-  ...(resource.relationships && { relationships: resource.relationships }),
-  ...(resource.meta && { meta: resource.meta }),
-});
+// 리소스 변환 함수들 (JSON API 스펙 준수)
+const transformFromJsonApi = (resource: JsonApiResource): any => {
+  // JSON API 스펙: type과 id는 반드시 문자열이어야 함
+  validateJsonApiResource(resource);
+  
+  return {
+    id: resource.id,
+    ...resource.attributes,
+    ...(resource.relationships && { relationships: resource.relationships }),
+    ...(resource.meta && { meta: resource.meta }),
+  };
+};
 
-const transformToJsonApi = (type: string, data: any, id?: string) => ({
-  data: {
-    type,
-    ...(id && { id }),
-    attributes: Object.fromEntries(
-      Object.entries(data).filter(([key]) => !['id', 'relationships', 'meta'].includes(key))
-    ),
-    ...(data.relationships && { relationships: data.relationships }),
-    ...(data.meta && { meta: data.meta }),
-  },
-});
+const transformToJsonApi = (type: string, data: any, id?: string) => {
+  // JSON API 스펙: type은 반드시 문자열이어야 함
+  if (typeof type !== 'string') {
+    throw new Error('Resource type must be a string');
+  }
+  
+  if (id && typeof id !== 'string') {
+    throw new Error('Resource id must be a string');
+  }
+
+  return {
+    data: {
+      type,
+      ...(id && { id }),
+      attributes: Object.fromEntries(
+        Object.entries(data).filter(([key]) => !['id', 'relationships', 'meta'].includes(key))
+      ),
+      ...(data.relationships && { relationships: data.relationships }),
+      ...(data.meta && { meta: data.meta }),
+    },
+  };
+};
 
 // 쿼리 빌더 클래스
 class JsonApiQueryBuilder {
@@ -151,8 +190,30 @@ class JsonApiQueryBuilder {
 export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
   const httpClient = createHttpClient();
 
+  const validateJsonApiDocument = (response: JsonApiResponse): void => {
+    // JSON API 스펙: 문서는 반드시 data, errors, meta 중 하나 이상을 포함해야 함
+    if (!response.data && !response.errors && !response.meta) {
+      throw new Error('JSON API document must contain at least one of: data, errors, meta');
+    }
+    
+    // JSON API 스펙: data와 errors는 동시에 존재할 수 없음
+    if (response.data && response.errors) {
+      throw new Error('JSON API document must not contain both data and errors');
+    }
+  };
+
   const handleResponse = async (response: JsonApiResponse): Promise<any> => {
+    validateJsonApiDocument(response);
+    
+    if (!response.data) {
+      return { data: [], total: 0 };
+    }
+    
     const dataArray = ensureArray(response.data);
+    
+    // 각 리소스 검증
+    dataArray.forEach(validateJsonApiResource);
+    
     return {
       data: dataArray.map(transformFromJsonApi),
       total: response.meta?.total || response.meta?.count || dataArray.length,
@@ -160,9 +221,17 @@ export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
   };
 
   const handleSingleResponse = (response: JsonApiResponse): any => {
+    validateJsonApiDocument(response);
+    
+    if (!response.data) {
+      throw new Error('Expected resource data, got null');
+    }
+    
     if (Array.isArray(response.data)) {
       throw new Error('Expected single resource, got array');
     }
+    
+    validateJsonApiResource(response.data);
     return { data: transformFromJsonApi(response.data) };
   };
 
@@ -203,7 +272,14 @@ export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
       
       try {
         const response = await httpClient(url);
-        return { data: ensureArray(response.data).map(transformFromJsonApi) };
+        if (!response.data) {
+          return { data: [] };
+        }
+        
+        const dataArray = ensureArray(response.data);
+        dataArray.forEach(validateJsonApiResource);
+        
+        return { data: dataArray.map(transformFromJsonApi) };
       } catch (error) {
         console.error('getMany error:', error);
         return { data: [] };
