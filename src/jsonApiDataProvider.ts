@@ -110,24 +110,24 @@ export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
       const { page = 1, perPage = 10 } = params.pagination || {};
       const { field = 'id', order = 'ASC' } = params.sort || {};
       
-      const query = new URLSearchParams();
+      const queryParts: string[] = [];
       
-      // JSON API 스펙 페이지네이션
-      query.append('page[number]', page.toString());
-      query.append('page[size]', perPage.toString());
+      // JSON API 스펙 페이지네이션 (대괄호 인코딩 방지)
+      queryParts.push(`page[number]=${encodeURIComponent(page.toString())}`);
+      queryParts.push(`page[size]=${encodeURIComponent(perPage.toString())}`);
       
       // JSON API 스펙 정렬
       const sortField = order === 'ASC' ? field : `-${field}`;
-      query.append('sort', sortField);
+      queryParts.push(`sort=${encodeURIComponent(sortField)}`);
       
-      // JSON API 스펙 필터링
+      // JSON API 스펙 필터링 (대괄호 인코딩 방지)
       Object.entries(params.filter || {}).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          query.append(`filter[${key}]`, value.toString());
+          queryParts.push(`filter[${key}]=${encodeURIComponent(value.toString())}`);
         }
       });
 
-      const url = `${apiUrl}/${resource}?${query}`;
+      const url = `${apiUrl}/${resource}?${queryParts.join('&')}`;
       
       try {
         const json = await jsonApiHttpClient(url);
@@ -171,10 +171,10 @@ export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
 
     // 여러 항목 조회 (GET /resources?filter[id]=1,2,3)
     getMany: async (resource: string, params: GetManyParams) => {
-      const query = new URLSearchParams();
-      query.append('filter[id]', params.ids.join(','));
+      const queryParts: string[] = [];
+      queryParts.push(`filter[id]=${encodeURIComponent(params.ids.join(','))}`);
       
-      const url = `${apiUrl}/${resource}?${query}`;
+      const url = `${apiUrl}/${resource}?${queryParts.join('&')}`;
       
       try {
         const json = await jsonApiHttpClient(url);
@@ -200,27 +200,27 @@ export const createJsonApiDataProvider = (apiUrl: string): DataProvider => {
       const { page = 1, perPage = 10 } = params.pagination || {};
       const { field = 'id', order = 'ASC' } = params.sort || {};
       
-      const query = new URLSearchParams();
+      const queryParts: string[] = [];
       
-      // 페이지네이션
-      query.append('page[number]', page.toString());
-      query.append('page[size]', perPage.toString());
+      // 페이지네이션 (대괄호 인코딩 방지)
+      queryParts.push(`page[number]=${encodeURIComponent(page.toString())}`);
+      queryParts.push(`page[size]=${encodeURIComponent(perPage.toString())}`);
       
       // 정렬
       const sortField = order === 'ASC' ? field : `-${field}`;
-      query.append('sort', sortField);
+      queryParts.push(`sort=${encodeURIComponent(sortField)}`);
       
-      // 타겟 필터
-      query.append(`filter[${params.target}]`, params.id.toString());
+      // 타겟 필터 (대괄호 인코딩 방지)
+      queryParts.push(`filter[${params.target}]=${encodeURIComponent(params.id.toString())}`);
       
-      // 추가 필터
+      // 추가 필터 (대괄호 인코딩 방지)
       Object.entries(params.filter || {}).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          query.append(`filter[${key}]`, value.toString());
+          queryParts.push(`filter[${key}]=${encodeURIComponent(value.toString())}`);
         }
       });
 
-      const url = `${apiUrl}/${resource}?${query}`;
+      const url = `${apiUrl}/${resource}?${queryParts.join('&')}`;
       
       try {
         const json = await jsonApiHttpClient(url);
