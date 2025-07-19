@@ -1,8 +1,11 @@
 import { Admin, Resource, List, Datagrid, TextField, Edit, SimpleForm, TextInput, EditButton, required } from "react-admin";
 import { Layout } from "./Layout";
+// JSON API Data Provider 사용
 import { dataProvider } from "./dataProvider";
 import { authProvider } from "./authProvider";
 import { People, Article, Category } from "@mui/icons-material";
+
+
 
 const UserList = () => (
   <List>
