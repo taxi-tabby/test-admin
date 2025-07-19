@@ -8,8 +8,7 @@ import type {
   UpdateParams, 
   UpdateManyParams, 
   DeleteParams, 
-  DeleteManyParams,
-  Identifier
+  DeleteManyParams
 } from 'react-admin';
 
 // JSON API 스펙 타입 정의
